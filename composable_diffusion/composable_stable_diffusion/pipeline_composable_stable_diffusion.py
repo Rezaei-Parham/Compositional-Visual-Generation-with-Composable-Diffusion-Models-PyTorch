@@ -562,25 +562,21 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # predict the noise residual
-                noise_pred = []
+                
                 for j in range(text_embeddings.shape[0]):
-                    noise_pred.append(
-                        self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
-                    )
-                noise_pred = torch.cat(noise_pred, dim=0)
+                    noise_pred = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                    # perform guidance
+                    if do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                        if khiar:
+                            noise_pred = noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        else:
+                            noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        print(noise_pred_text.shape)
 
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
-                    if khiar:
-                        noise_pred = noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    else:
-                        noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    print(noise_pred_text.shape)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents[0] = self.scheduler.step(noise_pred[0], t, latents[0], **extra_step_kwargs).prev_sample
-                print(f"t: {t}, latents: {latents.shape} -><- lmi: {latent_model_input.shape}")
+                    # compute the previous noisy sample x_t -> x_t-1
+                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+                    print(f"t: {t}, latents: {latents.shape} -><- lmi: {latent_model_input.shape}")
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()
