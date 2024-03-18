@@ -579,7 +579,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                     print(noise_pred_text.shape)
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+                latents[0] = self.scheduler.step(noise_pred[0], t, latents[0], **extra_step_kwargs).prev_sample
                 print(f"t: {t}, latents: {latents.shape} -><- lmi: {latent_model_input.shape}")
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
