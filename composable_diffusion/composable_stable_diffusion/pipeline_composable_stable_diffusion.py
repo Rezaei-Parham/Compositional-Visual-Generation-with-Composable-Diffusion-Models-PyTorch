@@ -572,7 +572,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                         if khiar:
                             noise_pred = noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                         else:
-                            noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                            noise_pred = noise_pred_uncond + (weights[j] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                         print(noise_pred_text.shape)
 
                     # compute the previous noisy sample x_t -> x_t-1
