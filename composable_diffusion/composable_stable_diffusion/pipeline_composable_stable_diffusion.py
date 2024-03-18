@@ -554,46 +554,92 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         #             if callback is not None and i % callback_steps == 0:
         #                 callback(i, t, latents)
 
-        # 7. Denoising loop (My second version)
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        guide2 = False
+        r = 1
+        ind = 0
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
+                if guide2:
+                    ind = 1
+                    r = 0
+                    guide2 = False
+                else:
+                    ind = 0
+                    r = 1
+                    guide2 = True
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-    
-                unc_noise_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
-        
-                noise_pred_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[1:2]).sample
+                # predict the noise residual
+                noise_pred = []
+                for j in range(text_embeddings.shape[0]):
+                    if j!=0 and j != ind+1:
+                        continue
+                    noise_pred.append(
+                        self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                    )
+                noise_pred = torch.cat(noise_pred, dim=0)
+
                 # perform guidance
-                print(f"noise_pred_1 shape: {noise_pred_1.shape}")
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = unc_noise_1, noise_pred_1
-                    noise_pred = noise_pred_uncond + (weights[0] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    print("1,",noise_pred_text.shape)
+                    noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                    if khiar:
+                        noise_pred = unc_weight * noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                    else:
+                        noise_pred = r * noise_pred_uncond + (weights[ind] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                    print(noise_pred_text.shape,noise_pred.shape,text_embeddings.shape)
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents2 = latents.clone()
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-                
-                unc_noise_2 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
-                noise_pred_2 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[2:3]).sample
-                # perform guidance
-                print(f"noise_pred_2 shape: {noise_pred_2.shape}")
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = unc_noise_2, noise_pred_2
-                    noise_pred_second = (weights[1] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    print("2,",noise_pred_text.shape)
-
-                noise_pred += noise_pred_second
-                latents = self.scheduler.step(noise_pred, t, latents2, **extra_step_kwargs).prev_sample
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()
                     if callback is not None and i % callback_steps == 0:
                         callback(i, t, latents)
+
+        # 7. Denoising loop (My second version)
+        # num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        # with self.progress_bar(total=num_inference_steps) as progress_bar:
+        #     for i, t in enumerate(timesteps):
+        #         # expand the latents if we are doing classifier free guidance
+        #         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+        #         latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+
+    
+        #         unc_noise_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
+        
+        #         noise_pred_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[1:2]).sample
+        #         # perform guidance
+        #         print(f"noise_pred_1 shape: {noise_pred_1.shape}")
+        #         if do_classifier_free_guidance:
+        #             noise_pred_uncond, noise_pred_text = unc_noise_1, noise_pred_1
+        #             noise_pred = noise_pred_uncond + (weights[0] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+        #             print("1,",noise_pred_text.shape)
+
+        #         # compute the previous noisy sample x_t -> x_t-1
+        #         latents2 = latents.clone()
+        #         latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+                
+        #         unc_noise_2 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
+        #         noise_pred_2 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[2:3]).sample
+        #         # perform guidance
+        #         print(f"noise_pred_2 shape: {noise_pred_2.shape}")
+        #         if do_classifier_free_guidance:
+        #             noise_pred_uncond, noise_pred_text = unc_noise_2, noise_pred_2
+        #             noise_pred_second = (weights[1] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+        #             print("2,",noise_pred_text.shape)
+
+        #         noise_pred += noise_pred_second
+        #         latents = self.scheduler.step(noise_pred, t, latents2, **extra_step_kwargs).prev_sample
+
+        #         # call the callback, if provided
+        #         if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+        #             progress_bar.update()
+        #             if callback is not None and i % callback_steps == 0:
+        #                 callback(i, t, latents)
 
         # 8. Post-processing
         image = self.decode_latents(latents)
