@@ -566,7 +566,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 # predict the noise residual
                 noise_pred = []
                 for j in range(text_embeddings.shape[0]):
-                    if j!=0 and j!= k:
+                    if j!=0 and j!= k+1:
                         continue
                     noise_pred.append(
                         self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
