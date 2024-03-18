@@ -395,6 +395,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
         weights: Optional[str] = "",
+        khiar: Optional[bool] = False
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -536,10 +537,13 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
-                    ws = torch.zeros_like(noise_pred_text, device=self.device)
-                    ws[0,:,:,:32] = weights[0,0,0,0]
-                    ws[1,:,32:,32:] = weights[1,0,0,0]
-                    noise_pred = noise_pred_uncond + (ws * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                    if khiar:
+                        ws = torch.zeros_like(noise_pred_text, device=self.device)
+                        ws[0,:,:,:32] = weights[0,0,0,0]
+                        ws[1,:,32:,32:] = weights[1,0,0,0]
+                        noise_pred = noise_pred_uncond + (ws * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                    else:
+                        noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                     print(noise_pred.shape,weights.shape)
 
                 # compute the previous noisy sample x_t -> x_t-1
