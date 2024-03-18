@@ -566,6 +566,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 for j in range(text_embeddings.shape[0]):
                     noise_pred = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
                     # perform guidance
+                    print(f"noise_pred shape: {noise_pred.shape}")
                     if do_classifier_free_guidance:
                         noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
                         if khiar:
