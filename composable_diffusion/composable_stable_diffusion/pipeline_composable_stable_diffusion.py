@@ -536,7 +536,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
-                    ws = torch.zeros_like(noise_pred, device=self.device)
+                    ws = torch.zeros_like(noise_pred_text, device=self.device)
                     ws[0,:,:,:32] = weights[0,0,0,0]
                     ws[1,:,32:,32:] = weights[1,0,0,0]
                     noise_pred = noise_pred_uncond + (ws * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
