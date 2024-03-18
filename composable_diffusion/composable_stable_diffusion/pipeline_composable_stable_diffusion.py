@@ -563,13 +563,13 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
     
-                unc_noise = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
+                unc_noise_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
         
                 noise_pred_1 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[1:2]).sample
                 # perform guidance
                 print(f"noise_pred_1 shape: {noise_pred_1.shape}")
                 if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = unc_noise, noise_pred
+                    noise_pred_uncond, noise_pred_text = unc_noise_1, noise_pred_1
                     noise_pred = noise_pred_uncond + (weights[0] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                     print("1,",noise_pred_text.shape)
 
