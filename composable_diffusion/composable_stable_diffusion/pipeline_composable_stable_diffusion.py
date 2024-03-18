@@ -574,7 +574,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                     print("1,",noise_pred_text.shape)
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents2 = latents.copy()
+                latents2 = latents.clone()
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
                 
                 unc_noise_2 = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[0:1]).sample
