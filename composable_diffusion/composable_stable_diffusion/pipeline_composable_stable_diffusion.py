@@ -397,6 +397,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         weights: Optional[str] = "",
         khiar: Optional[bool] = False,
         fullWeights: Optional[torch.FloatTensor] = None,
+        unc_weight: Optional[int] = 1,
     ):
         r"""
         Function invoked when calling the pipeline for generation.
@@ -539,7 +540,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
                     if khiar:
-                        noise_pred = noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        noise_pred = unc_weight * noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                     else:
                         noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                     print(noise_pred_text.shape,noise_pred.shape,text_embeddings.shape)
