@@ -562,17 +562,21 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # predict the noise residual
-                
+                unc_noise = None
                 for j in range(text_embeddings.shape[0]):
+                    if j == 0:
+                        unc_noise = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                        continue
+
                     noise_pred = self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
                     # perform guidance
                     print(f"noise_pred shape: {noise_pred.shape}")
                     if do_classifier_free_guidance:
-                        noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                        noise_pred_uncond, noise_pred_text = unc_noise, noise_pred
                         if khiar:
                             noise_pred = noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                         else:
-                            noise_pred = noise_pred_uncond + (weights[j] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                            noise_pred = noise_pred_uncond + (weights[j-1] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                         print(noise_pred_text.shape)
 
                     # compute the previous noisy sample x_t -> x_t-1
