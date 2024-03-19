@@ -522,31 +522,50 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
 
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        latents2 = latents.clone()
         with self.progress_bar(total=num_inference_steps) as progress_bar:
+            initer = True
             for i, t in enumerate(timesteps):
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                if initer:
+                    latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                    noise_pred = []
+                    for j in range(text_embeddings.shape[0]):
+                        if j!= 0 and j!=2:
+                            continue
+                        noise_pred.append(
+                            self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                        )
+                    noise_pred = torch.cat(noise_pred, dim=0)
 
-                # predict the noise residual
-                noise_pred = []
-                for j in range(text_embeddings.shape[0]):
-                    noise_pred.append(
-                        self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
-                    )
-                noise_pred = torch.cat(noise_pred, dim=0)
+                    if do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                        noise_pred = unc_weight * noise_pred_uncond + (weights[0]* (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        
 
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
-                    if khiar:
-                        noise_pred = unc_weight * noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    else:
-                        noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    print(noise_pred_text.shape,noise_pred.shape,text_embeddings.shape)
+                    # compute the previous noisy sample x_t -> x_t-1
+                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+                    # Second One
+                    latent_model_input = torch.cat([latents2] * 2) if do_classifier_free_guidance else latents2
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                    noise_pred = []
+                    for j in range(text_embeddings.shape[0]):
+                        if j!= 0 and j!=1:
+                            continue
+                        noise_pred.append(
+                            self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                        )
+                    noise_pred = torch.cat(noise_pred, dim=0)
+
+                    if do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                        noise_pred = unc_weight * noise_pred_uncond + (weights[1]* (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        
+
+                    # compute the previous noisy sample x_t -> x_t-1
+                    latents2 = self.scheduler.step(noise_pred, t, latents2, **extra_step_kwargs).prev_sample
+
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
@@ -554,7 +573,29 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                     if callback is not None and i % callback_steps == 0:
                         callback(i, t, latents)
 
-        # shitty one (not intuitive at all)
+        
+
+        # 8. Post-processing
+        image = self.decode_latents(latents)
+
+        # 9. Run safety checker
+        image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+
+        # 10. Convert to PIL
+        if output_type == "pil":
+            image = self.numpy_to_pil(image)
+
+        if not return_dict:
+            return (image, has_nsfw_concept)
+
+        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
+
+
+
+
+
+
+# shitty one (not intuitive at all)
         # num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         # guide2 = False
         # r = 1
@@ -641,18 +682,41 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         #             progress_bar.update()
         #             if callback is not None and i % callback_steps == 0:
         #                 callback(i, t, latents)
+    
 
-        # 8. Post-processing
-        image = self.decode_latents(latents)
 
-        # 9. Run safety checker
-        image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
-        # 10. Convert to PIL
-        if output_type == "pil":
-            image = self.numpy_to_pil(image)
+    # ORIGINAL ONE:
+    # 7. Denoising loop
+        # num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+        # with self.progress_bar(total=num_inference_steps) as progress_bar:
+        #     for i, t in enumerate(timesteps):
+        #         # expand the latents if we are doing classifier free guidance
+        #         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+        #         latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-        if not return_dict:
-            return (image, has_nsfw_concept)
+        #         # predict the noise residual
+        #         noise_pred = []
+        #         for j in range(text_embeddings.shape[0]):
+        #             noise_pred.append(
+        #                 self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
+        #             )
+        #         noise_pred = torch.cat(noise_pred, dim=0)
 
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
+        #         # perform guidance
+        #         if do_classifier_free_guidance:
+        #             noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+        #             if khiar:
+        #                 noise_pred = unc_weight * noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+        #             else:
+        #                 noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+        #             print(noise_pred_text.shape,noise_pred.shape,text_embeddings.shape)
+
+        #         # compute the previous noisy sample x_t -> x_t-1
+        #         latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+
+        #         # call the callback, if provided
+        #         if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+        #             progress_bar.update()
+        #             if callback is not None and i % callback_steps == 0:
+        #                 callback(i, t, latents)
