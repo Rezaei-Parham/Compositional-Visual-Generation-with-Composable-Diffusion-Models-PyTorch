@@ -496,7 +496,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         )
 
         # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
+        self.scheduler.set_timesteps(num_inference_steps*2, device=device)
         timesteps = self.scheduler.timesteps
 
         # 5. Prepare latent variables
@@ -523,6 +523,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         latents2 = latents.clone()
+        sched2 = self.scheduler
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             initer = True
             for i, t in enumerate(timesteps):
