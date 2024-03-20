@@ -584,7 +584,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                             noise_pred = unc_weight * noise_pred_uncond + (fullWeights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                         else:
                             noise_pred = noise_pred_uncond + (weights * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    
+                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                 l+=1
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
