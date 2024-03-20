@@ -528,9 +528,11 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
         # latents1 = latents.clone()
         latents2 = latents.clone()
         l = 0
+        t_s = []
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
-                if l < THRESHOLD :
+                if l <= THRESHOLD :
+                    t_s.append(t)
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
                     noise_pred = []
@@ -545,27 +547,30 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                         noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
                         noise_pred = noise_pred_uncond + (weights[0] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
                     latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-                
-                    latent_model_input = torch.cat([latents2] * 2) if do_classifier_free_guidance else latents2
-                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                    noise_pred = []
-                    for j in range(text_embeddings.shape[0]):
-                        if j == 1:
-                            continue
-                        noise_pred.append(
-                            self.unet(latent_model_input[:1], t, encoder_hidden_states=text_embeddings[j:j+1]).sample
-                        )
-                    noise_pred = torch.cat(noise_pred, dim=0)
-                    if do_classifier_free_guidance:
-                        noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
-                        noise_pred = noise_pred_uncond + (weights[1] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
-                    latents2 = self.scheduler.step(noise_pred, t, latents2, **extra_step_kwargs).prev_sample
-                else:
-                    if l== THRESHOLD:
-                        # TODO DOWNSAMPLE LATENT2 IN LATENT
-                        downsampled_tensor1 = torch.nn.functional.interpolate(latents2, size=(X1[3]-X1[1], X1[2]-X1[0]), mode='bilinear', align_corners=False)
-                        latents[:, :, X1[1]:X1[3], X1[0]:X1[2]] = downsampled_tensor1
                     
+                if l == THRESHOLD:
+                    self.scheduler.reset()
+                    for tt in t_s:
+                        latent_model_input = torch.cat([latents2] * 2) if do_classifier_free_guidance else latents2
+                        latent_model_input = self.scheduler.scale_model_input(latent_model_input, tt)
+                        noise_pred = []
+                        for j in range(text_embeddings.shape[0]):
+                            if j == 1:
+                                continue
+                            noise_pred.append(
+                                self.unet(latent_model_input[:1], tt, encoder_hidden_states=text_embeddings[j:j+1]).sample
+                            )
+                        noise_pred = torch.cat(noise_pred, dim=0)
+                        if do_classifier_free_guidance:
+                            noise_pred_uncond, noise_pred_text = noise_pred[:1], noise_pred[1:]
+                            noise_pred = noise_pred_uncond + (weights[1] * (noise_pred_text - noise_pred_uncond)).sum(dim=0, keepdims=True)
+                        latents2 = self.scheduler.step(noise_pred, tt, latents2, **extra_step_kwargs).prev_sample
+
+                    downsampled_tensor1 = torch.nn.functional.interpolate(latents2, size=(X1[3]-X1[1], X1[2]-X1[0]), mode='bilinear', align_corners=False)
+                    latents[:, :, X1[1]:X1[3], X1[0]:X1[2]] = downsampled_tensor1
+               
+
+                if l > THRESHOLD:
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                     latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
                     noise_pred = []
