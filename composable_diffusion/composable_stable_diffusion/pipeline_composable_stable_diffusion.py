@@ -563,7 +563,7 @@ class ComposableStableDiffusionPipeline(DiffusionPipeline):
                 else:
                     if l== THRESHOLD:
                         # TODO DOWNSAMPLE LATENT2 IN LATENT
-                        downsampled_tensor1 = torch.functional.interpolate(latents2, size=(X1[3]-X1[1], X1[2]-X1[0]), mode='bilinear', align_corners=False)
+                        downsampled_tensor1 = torch.nn.functional.interpolate(latents2, size=(X1[3]-X1[1], X1[2]-X1[0]), mode='bilinear', align_corners=False)
                         latents[:, :, X1[1]:X1[3], X1[0]:X1[2]] = downsampled_tensor1
                     
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
